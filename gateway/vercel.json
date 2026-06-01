@@ -1,0 +1,17 @@
+{
+  "crons": [
+    {
+      "path": "/cron/keepalive",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+  "env": {
+    "TELEGRAM_BOT_TOKEN": "@telegram-bot-token",
+    "REGISTRY_GROUP_ID": "@registry-group-id",
+    "TOPIC_REGISTRY": "@topic-registry",
+    "ORCHESTRATOR_URL": "@orchestrator-url",
+    "ORCHESTRATOR_SECRET": "@orchestrator-secret",
+    "CRON_SECRET": "@cron-secret",
+    "BASE_DOMAIN": "airdeploy.xyz"
+  }
+}

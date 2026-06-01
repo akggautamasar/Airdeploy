@@ -1,0 +1,7 @@
+{
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_ORCHESTRATOR_URL": "@orchestrator-url",
+    "NEXT_PUBLIC_ORCHESTRATOR_SECRET": "@orchestrator-secret"
+  }
+}

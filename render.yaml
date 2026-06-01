@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: airdeploy-orchestrator
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: orchestrator
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION
+        value: my_vault2
+      - key: REGISTRY_GROUP_ID
+        sync: false
+      - key: TOPIC_REGISTRY
+        sync: false
+      - key: TOPIC_ACCOUNTS
+        sync: false
+      - key: TOPIC_LOGS
+        sync: false
+      - key: TOPIC_HEALTH
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ZONE_ID
+        sync: false
+      - key: BASE_DOMAIN
+        value: airdeploy.xyz
+      - key: ORCHESTRATOR_SECRET
+        sync: false
