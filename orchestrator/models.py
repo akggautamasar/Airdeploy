@@ -105,3 +105,4 @@ class UpdateSettingsRequest(BaseModel):
     build_command: Optional[str] = None
     start_command: Optional[str] = None
     repo_url: Optional[str] = None
+    root_dir: Optional[str] = None

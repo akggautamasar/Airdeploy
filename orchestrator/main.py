@@ -290,24 +290,52 @@ async def update_settings(app_name: str, req: UpdateSettingsRequest):
         patch["branch"] = changes["branch"]
     if "repo_url" in changes:
         patch["repo"] = changes["repo_url"]
-    env_spec = {}
+    service_details: dict = {}
+    if "root_dir" in changes:
+        service_details["rootDir"] = changes["root_dir"]
+    env_spec: dict = {}
     if "build_command" in changes:
         env_spec["buildCommand"] = changes["build_command"]
     if "start_command" in changes:
         env_spec["startCommand"] = changes["start_command"]
     if env_spec:
-        patch["serviceDetails"] = {"envSpecificDetails": env_spec}
+        service_details["envSpecificDetails"] = env_spec
+    if service_details:
+        patch["serviceDetails"] = service_details
     await render_api.update_service(api_key, record["render_service_id"], patch)
-    # Keep registry in sync if repo_url changed
-    if "repo_url" in changes:
+    # Keep registry in sync for persisted fields
+    registry_update = {k: changes[k] for k in ("repo_url",) if k in changes}
+    if registry_update:
         msg_id = record.get("message_id") or record.get("_message_id")
         if msg_id:
-            record["repo_url"] = changes["repo_url"]
+            record.update(registry_update)
             record.pop("_message_id", None)
             import json as _json
             await registry._edit_message(msg_id, _json.dumps(record, indent=2))
     await registry.log_event(f"SETTINGS UPDATED: {app_name} — {changes}")
     return {"updated": True}
+
+
+@app.get("/repo-dirs", dependencies=[Depends(verify_secret)])
+async def get_repo_dirs(repo_url: str):
+    """Return top-level directories of a GitHub repo for the directory picker."""
+    import re
+    import httpx as _httpx
+    match = re.search(r"github\.com/([^/]+/[^/]+?)(?:\.git)?$", repo_url.rstrip("/"))
+    if not match:
+        raise HTTPException(status_code=400, detail="Invalid GitHub URL")
+    repo_path = match.group(1)
+    from config import GITHUB_API_BASE
+    async with _httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{GITHUB_API_BASE}/repos/{repo_path}/contents/",
+            headers={"Accept": "application/vnd.github.v3+json"},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"GitHub API error: {resp.status_code}")
+    items = resp.json()
+    dirs = [item["name"] for item in items if isinstance(item, dict) and item.get("type") == "dir"]
+    return {"dirs": dirs}
 
 
 @app.post("/fix-dns/{app_name}", dependencies=[Depends(verify_secret)])

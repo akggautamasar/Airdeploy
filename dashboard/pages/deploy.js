@@ -58,6 +58,8 @@ export default function Deploy() {
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [envPairs, setEnvPairs] = useState([]);
+  const [repoDirs, setRepoDirs] = useState([]);
+  const [repoDirsLoading, setRepoDirsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [logs, setLogs] = useState([]);
   const [result, setResult] = useState(null);
@@ -73,6 +75,26 @@ export default function Deploy() {
   };
 
   const handleChange = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const fetchRepoDirs = async (url) => {
+    if (!url || !url.includes("github.com")) { setRepoDirs([]); return; }
+    setRepoDirsLoading(true);
+    try {
+      const res = await fetch(`${API}/repo-dirs?repo_url=${encodeURIComponent(url)}`, {
+        headers: { "X-Secret": SECRET },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRepoDirs(data.dirs || []);
+      } else {
+        setRepoDirs([]);
+      }
+    } catch {
+      setRepoDirs([]);
+    } finally {
+      setRepoDirsLoading(false);
+    }
+  };
 
   const validateAppName = (name) => /^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$/.test(name);
 
@@ -210,6 +232,7 @@ export default function Deploy() {
                   placeholder="https://github.com/username/repo"
                   value={form.repo_url}
                   onChange={handleChange("repo_url")}
+                  onBlur={(e) => fetchRepoDirs(e.target.value)}
                   required
                   style={styles.input}
                 />
@@ -260,9 +283,32 @@ export default function Deploy() {
                     </select>
                   </div>
                   <div style={styles.field}>
-                    <label style={styles.label}>Root Directory</label>
-                    <input type="text" placeholder="./ (default)" value={form.root_dir} onChange={handleChange("root_dir")} style={styles.input} />
-                    <span style={styles.hint}>Leave blank to use repo root</span>
+                    <label style={styles.label}>
+                      Root Directory
+                      {repoDirsLoading && <span style={{ color: "#6b7280", fontWeight: 400, marginLeft: "0.5rem" }}>fetching…</span>}
+                    </label>
+                    {repoDirs.length > 0 ? (
+                      <select
+                        value={form.root_dir}
+                        onChange={(e) => {
+                          if (e.target.value === "__custom__") {
+                            handleChange("root_dir")({ target: { value: "" } });
+                          } else {
+                            handleChange("root_dir")(e);
+                          }
+                        }}
+                        style={styles.select}
+                      >
+                        <option value="">/ (repo root)</option>
+                        {repoDirs.map((d) => <option key={d} value={d}>{d}</option>)}
+                        <option value="__custom__">Custom path…</option>
+                      </select>
+                    ) : (
+                      <input type="text" placeholder="./ (default)" value={form.root_dir} onChange={handleChange("root_dir")} style={styles.input} />
+                    )}
+                    {(!repoDirs.length || form.root_dir === "") && (
+                      <span style={styles.hint}>Leave blank to use repo root. Paste repo URL above and click away to load folders.</span>
+                    )}
                   </div>
                   <div style={styles.field}>
                     <label style={styles.label}>Build Command</label>

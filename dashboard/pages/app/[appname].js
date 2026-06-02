@@ -253,12 +253,32 @@ function EnvTab({ appName }) {
 function SettingsTab({ app, appName, onDelete }) {
   const [repoUrl, setRepoUrl] = useState(app?.repo_url || "");
   const [branch, setBranch] = useState(app?.branch || "main");
+  const [rootDir, setRootDir] = useState(app?.root_dir || "");
   const [buildCmd, setBuildCmd] = useState(app?.build_command || "");
   const [startCmd, setStartCmd] = useState(app?.start_command || "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [dirs, setDirs] = useState([]);
+  const [dirsLoading, setDirsLoading] = useState(false);
+
+  const fetchDirs = async (url) => {
+    if (!url || !url.includes("github.com")) return;
+    setDirsLoading(true);
+    try {
+      const data = await apiFetch(`/repo-dirs?repo_url=${encodeURIComponent(url)}`);
+      setDirs(data.dirs || []);
+    } catch {
+      setDirs([]);
+    } finally {
+      setDirsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (app?.repo_url) fetchDirs(app.repo_url);
+  }, [app?.repo_url]);
 
   const save = async () => {
     setSaving(true);
@@ -270,6 +290,7 @@ function SettingsTab({ app, appName, onDelete }) {
         body: JSON.stringify({
           repo_url: repoUrl || undefined,
           branch: branch || undefined,
+          root_dir: rootDir || undefined,
           build_command: buildCmd || undefined,
           start_command: startCmd || undefined,
         }),
@@ -307,6 +328,37 @@ function SettingsTab({ app, appName, onDelete }) {
         <div style={s.field}>
           <label style={s.label}>Branch</label>
           <input value={branch} onChange={(e) => setBranch(e.target.value)} style={s.input} placeholder="main" />
+        </div>
+        <div style={s.field}>
+          <label style={s.label}>
+            Root Directory
+            {dirsLoading && <span style={{ color: "#6b7280", fontWeight: 400, marginLeft: "0.5rem" }}>fetching…</span>}
+          </label>
+          {dirs.length > 0 ? (
+            <select
+              value={rootDir}
+              onChange={(e) => setRootDir(e.target.value)}
+              style={{ ...s.input, cursor: "pointer" }}
+            >
+              <option value="">/ (repo root)</option>
+              {dirs.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+              <option value="__custom__">Custom path…</option>
+            </select>
+          ) : (
+            <input value={rootDir} onChange={(e) => setRootDir(e.target.value)} style={s.input} placeholder="./ (repo root)" />
+          )}
+          {rootDir === "__custom__" && (
+            <input
+              autoFocus
+              value=""
+              onChange={(e) => setRootDir(e.target.value)}
+              style={{ ...s.input, marginTop: "0.5rem" }}
+              placeholder="e.g. backend"
+            />
+          )}
+          <span style={{ color: "#6b7280", fontSize: "0.8rem" }}>Leave blank to use repo root</span>
         </div>
         <div style={s.field}>
           <label style={s.label}>Build Command</label>
