@@ -134,6 +134,7 @@ async def deploy(
             account_id=account_id,
             owner=owner,
             runtime=runtime,
+            repo_url=repo_url,
             cloudflare_record_id=cloudflare_record_id,
             status="deploying",
         )
@@ -234,3 +235,70 @@ async def redeploy(app_name: str, owner: str) -> None:
 
     await render_api.trigger_redeploy(api_key, render_service_id)
     await registry.log_event(f"REDEPLOY triggered: {app_name} by {owner}")
+
+
+async def migrate(app_name: str) -> Dict:
+    """Move a suspended/dead service to a fresh Render account automatically.
+    Called by the keepalive cron when a service fails 3+ consecutive health checks.
+    Requires repo_url to be stored in the deployment record."""
+    record = await registry.get_deployment(app_name)
+    if not record:
+        raise ValueError(f"App '{app_name}' not found.")
+
+    repo_url = record.get("repo_url", "")
+    if not repo_url:
+        raise RuntimeError(f"Cannot migrate '{app_name}': repo_url not stored in registry.")
+
+    runtime = record.get("runtime", "node")
+    owner = record.get("owner", "")
+    old_account_id = record["account_id"]
+    old_render_service_id = record["render_service_id"]
+    old_cloudflare_record_id = record.get("cloudflare_record_id", "")
+
+    await registry.log_event(f"MIGRATE started: {app_name} (old account: {old_account_id})")
+
+    # Pick a different account
+    new_account = await pool.get_available_account()
+    if new_account["account_id"] == old_account_id:
+        # If it's the same account (only one available), still try
+        pass
+    new_account_id = new_account["account_id"]
+    new_api_key = new_account["api_key"]
+
+    # Create new Render service on new account
+    service_data = await render_api.create_service(
+        new_api_key, repo_url, app_name, runtime, {}
+    )
+    new_service_id = service_data["service_id"]
+    new_render_url = service_data.get("render_url") or f"https://{app_name}.onrender.com"
+
+    # Update the DNS/Cloudflare record to point to new Render URL if needed
+    # (CNAME still points to Vercel, which reads render_url from registry, so just update registry)
+
+    # Update the registry record with new service info
+    msg_id = record.get("message_id") or record.get("_message_id")
+    if msg_id:
+        record["render_service_id"] = new_service_id
+        record["render_url"] = new_render_url
+        record["account_id"] = new_account_id
+        record["status"] = "deploying"
+        record["fail_count"] = 0
+        record.pop("_message_id", None)
+        await registry._edit_message(msg_id, __import__("json").dumps(record, indent=2))
+
+    # Clean up old service
+    accounts = await registry.get_all_accounts()
+    old_api_key = next((a["api_key"] for a in accounts if a.get("account_id") == old_account_id), None)
+    if old_api_key:
+        try:
+            await render_api.delete_service(old_api_key, old_render_service_id)
+        except Exception:
+            pass
+
+    await pool.mark_account_full(new_account_id)
+    await pool.decrement_account(old_account_id)
+
+    await registry.log_event(
+        f"MIGRATE success: {app_name} moved from {old_account_id} → {new_account_id}"
+    )
+    return {"app_name": app_name, "new_account": new_account_id, "new_render_url": new_render_url}

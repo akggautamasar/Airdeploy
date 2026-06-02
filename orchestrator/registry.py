@@ -114,6 +114,7 @@ async def register_deployment(
     account_id: str,
     owner: str,
     runtime: str,
+    repo_url: str = "",
     cloudflare_record_id: str = "",
     status: str = "deploying",
 ) -> Dict:
@@ -131,6 +132,8 @@ async def register_deployment(
         "last_ping": datetime.utcnow().isoformat() + "Z",
         "deployed_at": datetime.utcnow().isoformat() + "Z",
         "runtime": runtime,
+        "repo_url": repo_url,
+        "fail_count": 0,
         "message_id": None,
     }
 

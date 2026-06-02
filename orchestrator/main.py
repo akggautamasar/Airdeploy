@@ -267,8 +267,33 @@ async def fix_dns(app_name: str):
     }
 
 
+async def _do_migrate(app_name: str):
+    try:
+        await deployer.migrate(app_name)
+    except Exception as e:
+        await registry.log_event(f"AUTO-MIGRATE failed: {app_name} — {e}")
+
+
+@app.post("/migrate/{app_name}", dependencies=[Depends(verify_secret)])
+async def migrate_app(app_name: str, background_tasks: BackgroundTasks):
+    """Move a service to a fresh Render account. Called automatically when
+    a service fails 3+ consecutive keepalive checks."""
+    existing = await registry.get_deployment(app_name)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"App '{app_name}' not found")
+
+    async def run_migrate():
+        try:
+            await deployer.migrate(app_name)
+        except Exception as e:
+            await registry.log_event(f"MIGRATE failed: {app_name} — {e}")
+
+    background_tasks.add_task(run_migrate)
+    return {"app_name": app_name, "status": "migrating"}
+
+
 @app.post("/health/update", dependencies=[Depends(verify_secret)])
-async def update_health(req: HealthUpdateRequest):
+async def update_health(req: HealthUpdateRequest, background_tasks: BackgroundTasks):
     results = req.results
     alive_count = sum(1 for r in results if r.get("alive"))
     total_count = len(results)
@@ -283,18 +308,49 @@ async def update_health(req: HealthUpdateRequest):
     summary = "\n".join(lines)
     await registry.update_health_topic(summary)
 
+    migrate_candidates = []
+
     for r in results:
         app_name = r.get("app_name")
         alive = r.get("alive", False)
         if not app_name:
             continue
-        if alive:
-            await registry.update_deployment_status(app_name, "alive")
-        else:
-            # Don't overwrite "deploying" — the service may still be building.
-            existing = await registry.get_deployment(app_name)
-            if existing and existing.get("status") == "deploying":
-                continue
-            await registry.update_deployment_status(app_name, "suspended")
 
-    return {"updated": total_count}
+        existing = await registry.get_deployment(app_name)
+        if not existing:
+            continue
+
+        if alive:
+            # Reset failure counter on recovery
+            msg_id = existing.get("message_id") or existing.get("_message_id")
+            if msg_id and existing.get("fail_count", 0) > 0:
+                existing["fail_count"] = 0
+                existing["status"] = "alive"
+                existing.pop("_message_id", None)
+                await registry._edit_message(msg_id, json.dumps(existing, indent=2))
+            else:
+                await registry.update_deployment_status(app_name, "alive")
+        else:
+            # Skip services still building
+            if existing.get("status") == "deploying":
+                continue
+
+            # Increment failure counter
+            msg_id = existing.get("message_id") or existing.get("_message_id")
+            fail_count = existing.get("fail_count", 0) + 1
+            if msg_id:
+                existing["fail_count"] = fail_count
+                existing["status"] = "suspended"
+                existing.pop("_message_id", None)
+                await registry._edit_message(msg_id, json.dumps(existing, indent=2))
+
+            # After 3 consecutive failures, queue for auto-migration
+            if fail_count >= 3 and existing.get("repo_url"):
+                migrate_candidates.append(app_name)
+
+    # Trigger migration in background for persistently dead services
+    for app_name in migrate_candidates:
+        await registry.log_event(f"AUTO-MIGRATE queued: {app_name} (3+ failures)")
+        background_tasks.add_task(_do_migrate, app_name)
+
+    return {"updated": total_count, "migrating": migrate_candidates}
