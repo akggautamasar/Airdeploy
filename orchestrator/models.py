@@ -29,6 +29,11 @@ class DeployRequest(BaseModel):
     runtime: Optional[Runtime] = None
     owner: str
     env_vars: Dict[str, str] = Field(default_factory=dict)
+    branch: str = "main"
+    region: str = "oregon"
+    root_dir: str = ""
+    build_command: str = ""
+    start_command: str = ""
 
 
 class UndeployRequest(BaseModel):

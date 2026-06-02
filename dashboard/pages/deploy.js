@@ -49,8 +49,14 @@ export default function Deploy() {
     repo_url: "",
     app_name: "",
     runtime: "",
+    branch: "main",
+    region: "oregon",
+    root_dir: "",
+    build_command: "",
+    start_command: "",
     owner: typeof window !== "undefined" ? localStorage.getItem("airdeploy_owner") || "" : "",
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [envPairs, setEnvPairs] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -103,6 +109,11 @@ export default function Deploy() {
       runtime: form.runtime || undefined,
       owner: form.owner,
       env_vars,
+      branch: form.branch || "main",
+      region: form.region || "oregon",
+      root_dir: form.root_dir || undefined,
+      build_command: form.build_command || undefined,
+      start_command: form.start_command || undefined,
     };
 
     try {
@@ -228,6 +239,44 @@ export default function Deploy() {
                 </select>
               </div>
 
+              <button type="button" onClick={() => setShowAdvanced(v => !v)} style={styles.advancedToggle}>
+                {showAdvanced ? "▲ Hide advanced options" : "▼ Advanced options (branch, region, commands...)"}
+              </button>
+
+              {showAdvanced && (
+                <div style={styles.advancedBox}>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Branch</label>
+                    <input type="text" placeholder="main" value={form.branch} onChange={handleChange("branch")} style={styles.input} />
+                  </div>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Region</label>
+                    <select value={form.region} onChange={handleChange("region")} style={styles.select}>
+                      <option value="oregon">Oregon (US West)</option>
+                      <option value="ohio">Ohio (US East)</option>
+                      <option value="virginia">Virginia (US East)</option>
+                      <option value="frankfurt">Frankfurt (EU)</option>
+                      <option value="singapore">Singapore (Asia)</option>
+                    </select>
+                  </div>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Root Directory</label>
+                    <input type="text" placeholder="./ (default)" value={form.root_dir} onChange={handleChange("root_dir")} style={styles.input} />
+                    <span style={styles.hint}>Leave blank to use repo root</span>
+                  </div>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Build Command</label>
+                    <input type="text" placeholder="e.g. npm install or pip install -r requirements.txt" value={form.build_command} onChange={handleChange("build_command")} style={{ ...styles.input, fontFamily: "monospace" }} />
+                    <span style={styles.hint}>Leave blank to use runtime default</span>
+                  </div>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Start Command</label>
+                    <input type="text" placeholder="e.g. npm start or uvicorn main:app --host 0.0.0.0 --port $PORT" value={form.start_command} onChange={handleChange("start_command")} style={{ ...styles.input, fontFamily: "monospace" }} />
+                    <span style={styles.hint}>Leave blank to use runtime default. Instance type is always Free.</span>
+                  </div>
+                </div>
+              )}
+
               <div style={styles.field}>
                 <label style={styles.label}>Your Username *</label>
                 <input
@@ -312,6 +361,8 @@ const styles = {
   addEnvBtn: { background: "transparent", border: "1px dashed #2d2d2d", color: "#6b7280", borderRadius: "0.5rem", padding: "0.5rem 1rem", cursor: "pointer", fontSize: "0.85rem", width: "100%", marginTop: "0.25rem" },
   errorBox: { background: "#1a0f0f", border: "1px solid #3d1515", borderRadius: "0.75rem", padding: "1rem 1.5rem", color: "#ef4444" },
   logBox: { background: "#060606", border: "1px solid #1f1f1f", borderRadius: "0.75rem", padding: "1rem 1.25rem", fontFamily: "monospace", fontSize: "0.82rem", color: "#a3e635", maxHeight: "280px", overflowY: "auto", lineHeight: 1.7, whiteSpace: "pre-wrap" },
+  advancedToggle: { background: "transparent", border: "1px dashed #2d2d2d", color: "#6b7280", borderRadius: "0.5rem", padding: "0.6rem 1rem", cursor: "pointer", fontSize: "0.85rem", width: "100%", textAlign: "left" },
+  advancedBox: { background: "#0d0d0d", border: "1px solid #1f1f1f", borderRadius: "0.75rem", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.25rem" },
   submitBtn: { background: "linear-gradient(135deg, #6366f1, #7c3aed)", color: "#fff", border: "none", borderRadius: "0.75rem", padding: "1rem", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(99,102,241,0.4)" },
   successCard: { background: "#111", border: "1px solid #1f1f1f", borderRadius: "1.25rem", padding: "2.5rem", textAlign: "center" },
   successIcon: { fontSize: "3rem", marginBottom: "1rem" },

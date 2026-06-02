@@ -37,62 +37,74 @@ async def create_service(
     app_name: str,
     runtime: str,
     env_vars: Dict[str, str] = {},
+    branch: str = "main",
+    region: str = "oregon",
+    root_dir: str = "",
+    build_command: str = "",
+    start_command: str = "",
 ) -> Dict:
     owner_id = await get_owner_id(api_key)
 
     env_list = [{"key": k, "value": v} for k, v in env_vars.items()]
 
     if runtime == "static":
+        details: Dict = {
+            "buildCommand": build_command or "",
+            "publishPath": root_dir or "./",
+            "pullRequestPreviewsEnabled": "no",
+        }
         payload = {
             "type": "static_site",
             "name": app_name,
             "repo": repo_url,
-            "branch": "main",
+            "branch": branch,
             "autoDeploy": "no",
-            "serviceDetails": {
-                "buildCommand": "",
-                "publishPath": "./",
-                "pullRequestPreviewsEnabled": "no",
-            },
+            "serviceDetails": details,
             "envVars": env_list,
         }
     elif runtime == "python":
+        details = {
+            "env": "python",
+            "plan": "free",
+            "region": region,
+            "pullRequestPreviewsEnabled": "no",
+            "envSpecificDetails": {
+                "buildCommand": build_command or "pip install -r requirements.txt",
+                "startCommand": start_command or "uvicorn main:app --host 0.0.0.0 --port $PORT",
+            },
+        }
+        if root_dir:
+            details["rootDir"] = root_dir
         payload = {
             "type": "web_service",
             "name": app_name,
             "repo": repo_url,
-            "branch": "main",
+            "branch": branch,
             "autoDeploy": "no",
-            "serviceDetails": {
-                "env": "python",
-                "plan": "free",
-                "region": "oregon",
-                "pullRequestPreviewsEnabled": "no",
-                "envSpecificDetails": {
-                    "buildCommand": "pip install -r requirements.txt",
-                    "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
-                },
-            },
+            "serviceDetails": details,
             "envVars": env_list,
         }
     else:
-        # default: node
+        # node (default)
+        details = {
+            "env": "node",
+            "plan": "free",
+            "region": region,
+            "pullRequestPreviewsEnabled": "no",
+            "envSpecificDetails": {
+                "buildCommand": build_command or "npm install",
+                "startCommand": start_command or "npm start",
+            },
+        }
+        if root_dir:
+            details["rootDir"] = root_dir
         payload = {
             "type": "web_service",
             "name": app_name,
             "repo": repo_url,
-            "branch": "main",
+            "branch": branch,
             "autoDeploy": "no",
-            "serviceDetails": {
-                "env": "node",
-                "plan": "free",
-                "region": "oregon",
-                "pullRequestPreviewsEnabled": "no",
-                "envSpecificDetails": {
-                    "buildCommand": "npm install",
-                    "startCommand": "npm start",
-                },
-            },
+            "serviceDetails": details,
             "envVars": env_list,
         }
 

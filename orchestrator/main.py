@@ -100,6 +100,11 @@ async def deploy_app(req: DeployRequest, background_tasks: BackgroundTasks):
                 runtime=req.runtime.value if req.runtime else None,
                 owner=req.owner,
                 env_vars=req.env_vars,
+                branch=req.branch,
+                region=req.region,
+                root_dir=req.root_dir,
+                build_command=req.build_command,
+                start_command=req.start_command,
             )
         except Exception as e:
             await registry.log_event(f"DEPLOY error: {req.app_name} — {e}")

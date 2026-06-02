@@ -80,6 +80,11 @@ async def deploy(
     runtime: Optional[str],
     owner: str,
     env_vars: Dict[str, str] = {},
+    branch: str = "main",
+    region: str = "oregon",
+    root_dir: str = "",
+    build_command: str = "",
+    start_command: str = "",
 ) -> Dict:
     _validate_app_name(app_name)
     _validate_repo_url(repo_url)
@@ -103,7 +108,9 @@ async def deploy(
 
         # 1. Create the Render service
         service_data = await render_api.create_service(
-            api_key, repo_url, app_name, runtime, env_vars
+            api_key, repo_url, app_name, runtime, env_vars,
+            branch=branch, region=region, root_dir=root_dir,
+            build_command=build_command, start_command=start_command,
         )
         render_service_id = service_data["service_id"]
         render_url = service_data.get("render_url") or f"https://{app_name}.onrender.com"
