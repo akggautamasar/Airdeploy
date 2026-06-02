@@ -109,40 +109,62 @@ export default function Deploy() {
       addLog(`Deploying ${form.app_name} from ${form.repo_url}...`);
       if (!form.runtime) addLog("Auto-detecting runtime from repo...");
 
-      const pollInterval = setInterval(() => {
-        addLog("Still deploying, waiting for Render to build...");
-      }, 15000);
-
+      // Step 1: kick off deploy (returns immediately)
       const resp = await fetch(`${API}/deploy`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Secret": SECRET,
-        },
+        headers: { "Content-Type": "application/json", "X-Secret": SECRET },
         body: JSON.stringify(payload),
       });
-
-      clearInterval(pollInterval);
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({ detail: resp.statusText }));
         throw new Error(errData.detail || resp.statusText);
       }
 
-      const data = await resp.json();
-      addLog(`✅ Deploy successful!`);
-      addLog(`🌐 Live at: https://${data.subdomain}`);
-      addLog(`🔧 Render URL: ${data.render_url}`);
+      addLog("✅ Deploy started on Render. Waiting for it to go live (5-10 min)...");
+      addLog("💡 You can leave this page — check the dashboard for status.");
 
-      setResult(data);
+      // Step 2: poll GET /deployment/{app_name} until alive or error
+      let attempts = 0;
+      const maxAttempts = 40; // 40 × 15s = 10 minutes
+      const appName = form.app_name;
 
-      if (typeof window !== "undefined" && window.confetti) {
-        window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
-      } else {
-        import("canvas-confetti").then(({ default: confetti }) => {
-          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
-        });
-      }
+      const poll = async () => {
+        attempts++;
+        try {
+          const statusResp = await fetch(`${API}/deployment/${appName}`, {
+            headers: { "X-Secret": SECRET },
+          });
+          if (statusResp.ok) {
+            const dep = await statusResp.json();
+            if (dep.status === "alive") {
+              addLog(`🎉 App is live at: https://${dep.subdomain}`);
+              setResult({
+                subdomain: dep.subdomain,
+                render_url: dep.render_url,
+                service_id: dep.render_service_id,
+                status: "alive",
+              });
+              import("canvas-confetti").then(({ default: confetti }) => {
+                confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+              });
+              return;
+            } else if (dep.status === "error") {
+              throw new Error("Deploy failed on Render. Check logs.");
+            }
+          }
+        } catch (e) {
+          if (e.message.includes("Deploy failed")) throw e;
+        }
+
+        if (attempts >= maxAttempts) {
+          throw new Error("Timed out waiting for deploy. Check dashboard for status.");
+        }
+        addLog(`⏳ Still building... (${attempts * 15}s elapsed)`);
+        setTimeout(poll, 15000);
+      };
+
+      setTimeout(poll, 15000);
     } catch (err) {
       addLog(`❌ Deploy failed: ${err.message}`);
       setError(err.message);

@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 from datetime import datetime
 import json
+import asyncio
 
 import deployer
 import pool
@@ -66,25 +67,49 @@ async def health():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/deploy", response_model=DeployResponse, dependencies=[Depends(verify_secret)])
-async def deploy_app(req: DeployRequest):
+@app.post("/deploy", dependencies=[Depends(verify_secret)])
+async def deploy_app(req: DeployRequest, background_tasks: BackgroundTasks):
+    # Validate eagerly so errors surface immediately
+    import re
+    if not re.match(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$", req.app_name):
+        raise HTTPException(status_code=422, detail="Invalid app name.")
+    if not re.search(r"github\.com/[^/]+/[^/]+", req.repo_url):
+        raise HTTPException(status_code=422, detail="Invalid repo URL. Use: https://github.com/user/repo")
+
+    existing = await registry.get_deployment(req.app_name)
+    if existing:
+        raise HTTPException(status_code=409, detail=f"App name '{req.app_name}' is already taken.")
+
     try:
-        result = await deployer.deploy(
-            repo_url=req.repo_url,
-            app_name=req.app_name,
-            runtime=req.runtime.value if req.runtime else None,
-            owner=req.owner,
-            env_vars=req.env_vars,
-        )
-        return DeployResponse(**result)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except NoAccountAvailable as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except TimeoutError as e:
-        raise HTTPException(status_code=504, detail=str(e))
+        accounts = await registry.get_all_accounts()
+        if not any(a.get("status") == "available" for a in accounts):
+            raise HTTPException(status_code=503, detail="No accounts available. Platform at capacity.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Start deploy in background — returns immediately so browser doesn't timeout
+    async def run_deploy():
+        try:
+            await deployer.deploy(
+                repo_url=req.repo_url,
+                app_name=req.app_name,
+                runtime=req.runtime.value if req.runtime else None,
+                owner=req.owner,
+                env_vars=req.env_vars,
+            )
+        except Exception:
+            pass
+
+    background_tasks.add_task(run_deploy)
+
+    return {
+        "app_name": req.app_name,
+        "status": "deploying",
+        "message": "Deploy started. Poll GET /deployment/{app_name} for status.",
+        "poll_url": f"/deployment/{req.app_name}",
+    }
 
 
 @app.delete("/undeploy/{app_name}", dependencies=[Depends(verify_secret)])
