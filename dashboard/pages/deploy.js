@@ -127,7 +127,7 @@ export default function Deploy() {
       // Step 2: poll GET /deployment/{app_name} until alive or error
       let attempts = 0;
       const maxAttempts = 40; // 40 × 15s = 10 minutes
-      const appName = form.app_name;
+      const appName = payload.app_name; // capture from payload, not form state
 
       const poll = async () => {
         attempts++;

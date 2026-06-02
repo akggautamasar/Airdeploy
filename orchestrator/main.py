@@ -99,8 +99,13 @@ async def deploy_app(req: DeployRequest, background_tasks: BackgroundTasks):
                 owner=req.owner,
                 env_vars=req.env_vars,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            await registry.log_event(f"DEPLOY error: {req.app_name} — {e}")
+            # Store error status so frontend poll can surface it
+            try:
+                await registry.update_deployment_status(req.app_name, "error")
+            except Exception:
+                pass
 
     background_tasks.add_task(run_deploy)
 
