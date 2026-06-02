@@ -4,31 +4,25 @@ from typing import Dict, List, Optional
 from config import RENDER_API_BASE
 
 
-_RUNTIME_COMMANDS = {
-    "node": {
-        "buildCommand": "npm install",
-        "startCommand": "npm start",
-        "runtime": "node",
-    },
-    "python": {
-        "buildCommand": "pip install -r requirements.txt",
-        "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
-        "runtime": "python",
-    },
-    "static": {
-        "buildCommand": "",
-        "startCommand": "",
-        "runtime": "static",
-    },
-}
-
-
 def _headers(api_key: str) -> Dict[str, str]:
     return {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
+
+
+async def get_owner_id(api_key: str) -> str:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{RENDER_API_BASE}/owners?limit=1",
+            headers=_headers(api_key),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    if isinstance(data, list) and data:
+        return data[0].get("owner", data[0]).get("id", "")
+    return ""
 
 
 async def create_service(
@@ -38,27 +32,66 @@ async def create_service(
     runtime: str,
     env_vars: Dict[str, str] = {},
 ) -> Dict:
-    cmds = _RUNTIME_COMMANDS.get(runtime, _RUNTIME_COMMANDS["node"])
+    owner_id = await get_owner_id(api_key)
 
     env_list = [{"key": k, "value": v} for k, v in env_vars.items()]
 
-    payload = {
-        "type": "web_service",
-        "name": app_name,
-        "repo": repo_url,
-        "branch": "main",
-        "plan": "free",
-        "region": "oregon",
-        "runtime": cmds["runtime"],
-        "buildCommand": cmds["buildCommand"],
-        "startCommand": cmds["startCommand"],
-        "envVars": env_list,
-        "autoDeploy": "no",
-    }
-
     if runtime == "static":
-        payload.pop("startCommand")
-        payload["type"] = "static_site"
+        payload = {
+            "type": "static_site",
+            "name": app_name,
+            "ownerId": owner_id,
+            "repo": repo_url,
+            "branch": "main",
+            "autoDeploy": "no",
+            "serviceDetails": {
+                "buildCommand": "",
+                "publishPath": "./",
+                "pullRequestPreviewsEnabled": "no",
+            },
+            "envVars": env_list,
+        }
+    elif runtime == "python":
+        payload = {
+            "type": "web_service",
+            "name": app_name,
+            "ownerId": owner_id,
+            "repo": repo_url,
+            "branch": "main",
+            "autoDeploy": "no",
+            "serviceDetails": {
+                "env": "python",
+                "plan": "free",
+                "region": "oregon",
+                "pullRequestPreviewsEnabled": "no",
+                "envSpecificDetails": {
+                    "buildCommand": "pip install -r requirements.txt",
+                    "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
+                },
+            },
+            "envVars": env_list,
+        }
+    else:
+        # default: node
+        payload = {
+            "type": "web_service",
+            "name": app_name,
+            "ownerId": owner_id,
+            "repo": repo_url,
+            "branch": "main",
+            "autoDeploy": "no",
+            "serviceDetails": {
+                "env": "node",
+                "plan": "free",
+                "region": "oregon",
+                "pullRequestPreviewsEnabled": "no",
+                "envSpecificDetails": {
+                    "buildCommand": "npm install",
+                    "startCommand": "npm start",
+                },
+            },
+            "envVars": env_list,
+        }
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
@@ -71,7 +104,11 @@ async def create_service(
 
     service = data.get("service", data)
     service_id = service.get("id", "")
-    render_url = service.get("serviceDetails", {}).get("url", "") or service.get("url", "")
+    render_url = (
+        service.get("serviceDetails", {}).get("url", "")
+        or service.get("url", "")
+        or f"https://{app_name}.onrender.com"
+    )
 
     return {"service_id": service_id, "render_url": render_url, "raw": service}
 
@@ -86,8 +123,9 @@ async def get_service(api_key: str, service_id: str) -> Dict:
         data = resp.json()
 
     service = data.get("service", data)
-    status = service.get("serviceDetails", {}).get("status", service.get("status", "unknown"))
-    url = service.get("serviceDetails", {}).get("url", service.get("url", ""))
+    details = service.get("serviceDetails", {})
+    status = details.get("status", service.get("status", "unknown"))
+    url = details.get("url", service.get("url", ""))
     return {"status": status, "url": url, "raw": service}
 
 
@@ -112,8 +150,8 @@ async def get_logs(api_key: str, service_id: str) -> str:
 
     if isinstance(data, list):
         return "\n".join(
-            f"[{entry.get('timestamp', '')}] {entry.get('message', '')}"
-            for entry in data
+            f"[{e.get('timestamp', '')}] {e.get('message', '')}"
+            for e in data
         )
     return str(data)
 
