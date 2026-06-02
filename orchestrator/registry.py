@@ -8,6 +8,7 @@ from config import (
     TELEGRAM_API_ID,
     TELEGRAM_API_HASH,
     TELEGRAM_SESSION,
+    TELEGRAM_SESSION_STRING,
     REGISTRY_GROUP_ID,
     TOPIC_REGISTRY,
     TOPIC_ACCOUNTS,
@@ -21,11 +22,21 @@ _client: Optional[Client] = None
 async def get_client() -> Client:
     global _client
     if _client is None or not _client.is_connected:
-        _client = Client(
-            TELEGRAM_SESSION,
-            api_id=TELEGRAM_API_ID,
-            api_hash=TELEGRAM_API_HASH,
-        )
+        if TELEGRAM_SESSION_STRING:
+            # Preferred: session string from env var (no file needed)
+            _client = Client(
+                name="airdeploy",
+                api_id=TELEGRAM_API_ID,
+                api_hash=TELEGRAM_API_HASH,
+                session_string=TELEGRAM_SESSION_STRING,
+            )
+        else:
+            # Fallback: session file on disk
+            _client = Client(
+                TELEGRAM_SESSION,
+                api_id=TELEGRAM_API_ID,
+                api_hash=TELEGRAM_API_HASH,
+            )
         await _client.start()
     return _client
 

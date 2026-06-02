@@ -6,6 +6,7 @@ load_dotenv()
 TELEGRAM_API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
 TELEGRAM_SESSION = os.getenv("TELEGRAM_SESSION", "my_vault2")
+TELEGRAM_SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
 
 REGISTRY_GROUP_ID = int(os.getenv("REGISTRY_GROUP_ID", "0"))
 TOPIC_REGISTRY = int(os.getenv("TOPIC_REGISTRY", "0"))
