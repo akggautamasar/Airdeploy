@@ -1,3 +1,5 @@
+export const config = { runtime: "edge" };
+
 export default async function handler(request) {
   // Auth is optional — if CRON_SECRET is set, enforce it; otherwise allow all
   const cronSecret = process.env.CRON_SECRET;
