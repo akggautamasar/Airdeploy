@@ -31,6 +31,17 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    return {
+        "name": "AirDeploy Orchestrator",
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 async def verify_secret(x_secret: Optional[str] = Header(None)):
     if not ORCHESTRATOR_SECRET:
         return
