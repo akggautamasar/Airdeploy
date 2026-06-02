@@ -23,7 +23,6 @@ async def get_client() -> Client:
     global _client
     if _client is None or not _client.is_connected:
         if TELEGRAM_SESSION_STRING:
-            # Preferred: session string from env var (no file needed)
             _client = Client(
                 name="airdeploy",
                 api_id=TELEGRAM_API_ID,
@@ -31,13 +30,17 @@ async def get_client() -> Client:
                 session_string=TELEGRAM_SESSION_STRING,
             )
         else:
-            # Fallback: session file on disk
             _client = Client(
                 TELEGRAM_SESSION,
                 api_id=TELEGRAM_API_ID,
                 api_hash=TELEGRAM_API_HASH,
             )
         await _client.start()
+        # Warm up peer cache so Pyrogram can resolve the group ID
+        try:
+            await _client.get_chat(REGISTRY_GROUP_ID)
+        except Exception:
+            pass
     return _client
 
 
