@@ -24,7 +24,7 @@ async def add_subdomain(subdomain: str, target_url: str) -> str:
         "name": subdomain,
         "content": hostname,
         "ttl": 1,
-        "proxied": False,
+        "proxied": True,
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -41,6 +41,23 @@ async def add_subdomain(subdomain: str, target_url: str) -> str:
         raise RuntimeError(f"Cloudflare DNS error: {errors}")
 
     return data["result"]["id"]
+
+
+async def enable_proxy(record_id: str, subdomain: str, hostname: str) -> bool:
+    payload = {
+        "type": "CNAME",
+        "name": subdomain,
+        "content": hostname,
+        "ttl": 1,
+        "proxied": True,
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.put(
+            f"{CLOUDFLARE_API_BASE}/zones/{CLOUDFLARE_ZONE_ID}/dns_records/{record_id}",
+            headers=_headers(),
+            json=payload,
+        )
+        return resp.is_success
 
 
 async def delete_subdomain(record_id: str) -> bool:

@@ -206,6 +206,29 @@ async def get_logs(app_name: str):
     return {"logs": logs}
 
 
+@app.post("/fix-dns/{app_name}", dependencies=[Depends(verify_secret)])
+async def fix_dns(app_name: str):
+    """Re-enable Cloudflare proxy for an existing deployment whose DNS record
+    was created without proxying (proxied: false)."""
+    record = await registry.get_deployment(app_name)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"App '{app_name}' not found")
+
+    cf_record_id = record.get("cloudflare_record_id", "")
+    render_url = record.get("render_url", "")
+    if not cf_record_id or not render_url:
+        raise HTTPException(status_code=400, detail="Missing cloudflare_record_id or render_url in registry")
+
+    from urllib.parse import urlparse
+    hostname = urlparse(render_url).hostname or render_url
+    from config import BASE_DOMAIN
+    subdomain = f"{app_name}.{BASE_DOMAIN}"
+    ok = await cloudflare_api.enable_proxy(cf_record_id, subdomain, hostname)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Cloudflare update failed")
+    return {"fixed": True, "subdomain": subdomain, "proxied": True}
+
+
 @app.post("/health/update", dependencies=[Depends(verify_secret)])
 async def update_health(req: HealthUpdateRequest):
     results = req.results
