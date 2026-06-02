@@ -138,11 +138,13 @@ export default function Deploy() {
           if (statusResp.ok) {
             const dep = await statusResp.json();
             if (dep.status === "alive") {
-              addLog(`🎉 App is live at: https://${dep.subdomain}`);
+              const subdomain = dep.subdomain || `${appName}.${process.env.NEXT_PUBLIC_BASE_DOMAIN || "akggautam.site"}`;
+              const renderUrl = dep.render_url || `https://${appName}.onrender.com`;
+              addLog(`🎉 App is live at: https://${subdomain}`);
               setResult({
-                subdomain: dep.subdomain,
-                render_url: dep.render_url,
-                service_id: dep.render_service_id,
+                subdomain,
+                render_url: renderUrl,
+                service_id: dep.render_service_id || dep.service_id || "",
                 status: "alive",
               });
               import("canvas-confetti").then(({ default: confetti }) => {

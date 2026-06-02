@@ -111,9 +111,13 @@ async def deploy(
             await render_api.delete_service(api_key, render_service_id)
             raise TimeoutError(f"Deploy of '{app_name}' timed out after 300 seconds.")
 
+        # Render sometimes returns URL only after service is live — always re-fetch
+        svc = await render_api.get_service(api_key, render_service_id)
+        live_url = svc.get("url", "").strip()
+        if live_url:
+            render_url = live_url
         if not render_url:
-            svc = await render_api.get_service(api_key, render_service_id)
-            render_url = svc.get("url", f"https://{app_name}.onrender.com")
+            render_url = f"https://{app_name}.onrender.com"
 
         try:
             subdomain = f"{app_name}.{BASE_DOMAIN}"
