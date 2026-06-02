@@ -145,7 +145,7 @@ async def deploy(
             cloudflare_record_id=cloudflare_record_id,
             status="deploying",
         )
-        await pool.mark_account_full(account_id)
+        # account already incremented inside pool.get_available_account
 
         # 4. Wait for Render to finish building (up to 10 min).
         #    On timeout, leave status as "deploying" — the keepalive cron will
@@ -302,7 +302,7 @@ async def migrate(app_name: str) -> Dict:
         except Exception:
             pass
 
-    await pool.mark_account_full(new_account_id)
+    # new_account already incremented inside pool.get_available_account
     await pool.decrement_account(old_account_id)
 
     await registry.log_event(

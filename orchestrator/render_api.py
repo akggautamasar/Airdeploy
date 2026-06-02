@@ -256,6 +256,38 @@ async def trigger_redeploy(api_key: str, service_id: str) -> Dict:
         return resp.json()
 
 
+async def suspend_service(api_key: str, service_id: str) -> bool:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{RENDER_API_BASE}/services/{service_id}/suspend",
+            headers=_headers(api_key),
+            json={},
+        )
+        return resp.is_success
+
+
+async def resume_service(api_key: str, service_id: str) -> bool:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{RENDER_API_BASE}/services/{service_id}/resume",
+            headers=_headers(api_key),
+            json={},
+        )
+        return resp.is_success
+
+
+async def get_metrics(api_key: str, service_id: str) -> Dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{RENDER_API_BASE}/services/{service_id}/metrics",
+            headers=_headers(api_key),
+            params={"resource": ["cpu_percentage", "memory_usage_mb"]},
+        )
+        if not resp.is_success:
+            return {}
+        return resp.json()
+
+
 async def wait_for_deploy(api_key: str, service_id: str, timeout: int = 300) -> str:
     elapsed = 0
     interval = 10

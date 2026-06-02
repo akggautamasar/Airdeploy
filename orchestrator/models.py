@@ -106,3 +106,5 @@ class UpdateSettingsRequest(BaseModel):
     start_command: Optional[str] = None
     repo_url: Optional[str] = None
     root_dir: Optional[str] = None
+    health_check_path: Optional[str] = None
+    auto_deploy: Optional[bool] = None

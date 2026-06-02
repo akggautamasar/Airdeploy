@@ -300,8 +300,12 @@ async def update_settings(app_name: str, req: UpdateSettingsRequest):
         env_spec["startCommand"] = changes["start_command"]
     if env_spec:
         service_details["envSpecificDetails"] = env_spec
+    if "health_check_path" in changes:
+        service_details["healthCheckPath"] = changes["health_check_path"]
     if service_details:
         patch["serviceDetails"] = service_details
+    if "auto_deploy" in changes:
+        patch["autoDeploy"] = "yes" if changes["auto_deploy"] else "no"
     await render_api.update_service(api_key, record["render_service_id"], patch)
     # Keep registry in sync for persisted fields
     registry_update = {k: changes[k] for k in ("repo_url",) if k in changes}
@@ -314,6 +318,33 @@ async def update_settings(app_name: str, req: UpdateSettingsRequest):
             await registry._edit_message(msg_id, _json.dumps(record, indent=2))
     await registry.log_event(f"SETTINGS UPDATED: {app_name} — {changes}")
     return {"updated": True}
+
+
+@app.post("/deployment/{app_name}/suspend", dependencies=[Depends(verify_secret)])
+async def suspend_app(app_name: str):
+    record, api_key = await _get_api_key_for_app(app_name)
+    ok = await render_api.suspend_service(api_key, record["render_service_id"])
+    if ok:
+        await registry.update_deployment_status(app_name, "suspended")
+        await registry.log_event(f"SUSPEND: {app_name}")
+    return {"suspended": ok}
+
+
+@app.post("/deployment/{app_name}/resume", dependencies=[Depends(verify_secret)])
+async def resume_app(app_name: str):
+    record, api_key = await _get_api_key_for_app(app_name)
+    ok = await render_api.resume_service(api_key, record["render_service_id"])
+    if ok:
+        await registry.update_deployment_status(app_name, "deploying")
+        await registry.log_event(f"RESUME: {app_name}")
+    return {"resumed": ok}
+
+
+@app.get("/deployment/{app_name}/metrics", dependencies=[Depends(verify_secret)])
+async def get_metrics(app_name: str):
+    record, api_key = await _get_api_key_for_app(app_name)
+    data = await render_api.get_metrics(api_key, record["render_service_id"])
+    return {"metrics": data}
 
 
 @app.get("/repo-dirs", dependencies=[Depends(verify_secret)])

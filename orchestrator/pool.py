@@ -1,8 +1,11 @@
 import os
+import asyncio
 from typing import Dict, Optional, List
 import registry
 
 MAX_SERVICES_PER_ACCOUNT = int(os.getenv("MAX_SERVICES_PER_ACCOUNT", "5"))
+
+_selection_lock = asyncio.Lock()
 
 
 class NoAccountAvailable(Exception):
@@ -10,12 +13,16 @@ class NoAccountAvailable(Exception):
 
 
 async def get_available_account() -> Dict:
-    accounts = await registry.get_all_accounts()
-    available = [a for a in accounts if a.get("status") == "available"]
-    if not available:
-        raise NoAccountAvailable("No Render accounts available. Platform at capacity.")
-    # Pick the least-loaded account so services spread across accounts evenly
-    return min(available, key=lambda a: a.get("services_count", 0))
+    async with _selection_lock:
+        accounts = await registry.get_all_accounts()
+        available = [a for a in accounts if a.get("status") == "available"]
+        if not available:
+            raise NoAccountAvailable("No Render accounts available. Platform at capacity.")
+        # Pick least-loaded; immediately reserve the slot under the lock so
+        # concurrent migrations/deploys don't both land on the same account.
+        chosen = min(available, key=lambda a: a.get("services_count", 0))
+        await increment_account(chosen["account_id"])
+        return chosen
 
 
 async def increment_account(account_id: str) -> None:
