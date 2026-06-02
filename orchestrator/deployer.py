@@ -100,25 +100,14 @@ async def deploy(
     try:
         await registry.log_event(f"DEPLOY started: {app_name} by {owner}")
 
+        # 1. Create the Render service
         service_data = await render_api.create_service(
             api_key, repo_url, app_name, runtime, env_vars
         )
         render_service_id = service_data["service_id"]
+        render_url = service_data.get("render_url") or f"https://{app_name}.onrender.com"
 
-        try:
-            render_url = await render_api.wait_for_deploy(api_key, render_service_id)
-        except TimeoutError:
-            await render_api.delete_service(api_key, render_service_id)
-            raise TimeoutError(f"Deploy of '{app_name}' timed out after 300 seconds.")
-
-        # Render sometimes returns URL only after service is live — always re-fetch
-        svc = await render_api.get_service(api_key, render_service_id)
-        live_url = svc.get("url", "").strip()
-        if live_url:
-            render_url = live_url
-        if not render_url:
-            render_url = f"https://{app_name}.onrender.com"
-
+        # 2. Add Cloudflare DNS record immediately (before waiting for live)
         try:
             subdomain = f"{app_name}.{BASE_DOMAIN}"
             cloudflare_record_id = await cloudflare_api.add_subdomain(subdomain, render_url)
@@ -126,7 +115,9 @@ async def deploy(
             await render_api.delete_service(api_key, render_service_id)
             raise RuntimeError(f"Cloudflare DNS failed: {cf_err}")
 
-        record = await registry.register_deployment(
+        # 3. Register in Telegram with status="deploying" so the name is tracked
+        #    even if the wait-for-live step times out.
+        await registry.register_deployment(
             app_name=app_name,
             render_url=render_url,
             render_service_id=render_service_id,
@@ -134,19 +125,43 @@ async def deploy(
             owner=owner,
             runtime=runtime,
             cloudflare_record_id=cloudflare_record_id,
+            status="deploying",
         )
-
         await pool.mark_account_full(account_id)
-        await registry.log_event(
-            f"DEPLOY success: {app_name} → {render_url} (owner: {owner})"
-        )
 
-        return {
-            "subdomain": f"{app_name}.{BASE_DOMAIN}",
-            "render_url": render_url,
-            "service_id": render_service_id,
-            "status": "alive",
-        }
+        # 4. Wait for Render to finish building (up to 10 min).
+        #    On timeout, leave status as "deploying" — the keepalive cron will
+        #    flip it to "alive" once the service responds.
+        try:
+            live_url = await render_api.wait_for_deploy(api_key, render_service_id, timeout=600)
+            # Re-fetch to get the canonical URL Render assigned
+            try:
+                svc = await render_api.get_service(api_key, render_service_id)
+                actual_url = svc.get("url", "").strip() or live_url or render_url
+            except Exception:
+                actual_url = live_url or render_url
+            await registry.update_deployment_status(app_name, "alive")
+            await registry.log_event(
+                f"DEPLOY success: {app_name} → {actual_url} (owner: {owner})"
+            )
+            return {
+                "subdomain": f"{app_name}.{BASE_DOMAIN}",
+                "render_url": actual_url,
+                "service_id": render_service_id,
+                "status": "alive",
+            }
+        except TimeoutError:
+            # Service is registered; keepalive will mark alive once it's up.
+            await registry.log_event(
+                f"DEPLOY building: {app_name} still starting after 10 min, "
+                f"keepalive will mark alive when ready"
+            )
+            return {
+                "subdomain": f"{app_name}.{BASE_DOMAIN}",
+                "render_url": render_url,
+                "service_id": render_service_id,
+                "status": "deploying",
+            }
 
     except Exception as exc:
         await registry.log_event(f"DEPLOY failed: {app_name} — {exc}")

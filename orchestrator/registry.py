@@ -115,6 +115,7 @@ async def register_deployment(
     owner: str,
     runtime: str,
     cloudflare_record_id: str = "",
+    status: str = "deploying",
 ) -> Dict:
     from config import BASE_DOMAIN
 
@@ -126,7 +127,7 @@ async def register_deployment(
         "cloudflare_record_id": cloudflare_record_id,
         "account_id": account_id,
         "owner": owner,
-        "status": "alive",
+        "status": status,
         "last_ping": datetime.utcnow().isoformat() + "Z",
         "deployed_at": datetime.utcnow().isoformat() + "Z",
         "runtime": runtime,

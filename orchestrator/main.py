@@ -225,8 +225,15 @@ async def update_health(req: HealthUpdateRequest):
     for r in results:
         app_name = r.get("app_name")
         alive = r.get("alive", False)
-        if app_name:
-            status = "alive" if alive else "suspended"
-            await registry.update_deployment_status(app_name, status)
+        if not app_name:
+            continue
+        if alive:
+            await registry.update_deployment_status(app_name, "alive")
+        else:
+            # Don't overwrite "deploying" — the service may still be building.
+            existing = await registry.get_deployment(app_name)
+            if existing and existing.get("status") == "deploying":
+                continue
+            await registry.update_deployment_status(app_name, "suspended")
 
     return {"updated": total_count}
