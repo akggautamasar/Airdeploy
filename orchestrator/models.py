@@ -44,6 +44,11 @@ class AddAccountRequest(BaseModel):
     email: str
 
 
+class UpdateAccountRequest(BaseModel):
+    status: Optional[str] = None
+    services_count: Optional[int] = None
+
+
 class DeploymentRecord(BaseModel):
     app_name: str
     subdomain: str

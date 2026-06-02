@@ -16,6 +16,7 @@ from models import (
     UndeployRequest,
     RedeployRequest,
     AddAccountRequest,
+    UpdateAccountRequest,
     DeployResponse,
     HealthResponse,
     HealthUpdateRequest,
@@ -185,12 +186,15 @@ async def add_account(req: AddAccountRequest):
 
 
 @app.patch("/accounts/{account_id}", dependencies=[Depends(verify_secret)])
-async def update_account(account_id: str, updates: dict):
-    """Update an account's fields (status, services_count, etc.)."""
-    ok = await registry.update_account(account_id, updates)
+async def update_account(account_id: str, req: UpdateAccountRequest):
+    """Update an account's status and/or services_count."""
+    changes = {k: v for k, v in req.model_dump().items() if v is not None}
+    if not changes:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+    ok = await registry.update_account(account_id, changes)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Account '{account_id}' not found")
-    return {"updated": True, "account_id": account_id, "changes": updates}
+    return {"updated": True, "account_id": account_id, "changes": changes}
 
 
 @app.delete("/accounts/{account_id}", dependencies=[Depends(verify_secret)])
