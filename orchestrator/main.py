@@ -184,6 +184,29 @@ async def add_account(req: AddAccountRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.patch("/accounts/{account_id}", dependencies=[Depends(verify_secret)])
+async def update_account(account_id: str, updates: dict):
+    """Update an account's fields (status, services_count, etc.)."""
+    ok = await registry.update_account(account_id, updates)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Account '{account_id}' not found")
+    return {"updated": True, "account_id": account_id, "changes": updates}
+
+
+@app.delete("/accounts/{account_id}", dependencies=[Depends(verify_secret)])
+async def delete_account(account_id: str):
+    """Remove an account from the pool (e.g. to clean up duplicates)."""
+    accounts = await registry.get_all_accounts()
+    target = next((a for a in accounts if a.get("account_id") == account_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Account '{account_id}' not found")
+    msg_id = target.get("message_id") or target.get("_message_id")
+    if not msg_id:
+        raise HTTPException(status_code=500, detail="Cannot determine message ID")
+    await registry._delete_message(msg_id)
+    return {"deleted": True, "account_id": account_id}
+
+
 @app.get("/logs/{app_name}", dependencies=[Depends(verify_secret)])
 async def get_logs(app_name: str):
     record = await registry.get_deployment(app_name)
