@@ -103,6 +103,12 @@ function DeploymentCard({ deployment, onRedeploy, onDelete }) {
       </div>
 
       <div style={styles.cardActions}>
+        <Link
+          href={`/app/${deployment.app_name}`}
+          style={{ ...styles.btn, ...styles.btnPrimary, textDecoration: "none" }}
+        >
+          Manage →
+        </Link>
         <button
           onClick={handleRedeploy}
           disabled={!!loading}
@@ -110,12 +116,6 @@ function DeploymentCard({ deployment, onRedeploy, onDelete }) {
         >
           {loading === "redeploy" ? "..." : "🔄 Redeploy"}
         </button>
-        <Link
-          href={`/logs/${deployment.app_name}`}
-          style={{ ...styles.btn, ...styles.btnSecondary, textDecoration: "none" }}
-        >
-          📋 Logs
-        </Link>
         <button
           onClick={handleDelete}
           disabled={!!loading}
@@ -273,6 +273,7 @@ const styles = {
   metaItem: { color: "#6b7280", fontSize: "0.82rem" },
   cardActions: { display: "flex", gap: "0.75rem", flexWrap: "wrap" },
   btn: { padding: "0.5rem 1rem", borderRadius: "0.5rem", border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600 },
+  btnPrimary: { background: "#6366f1", color: "#fff" },
   btnSecondary: { background: "#1f1f1f", color: "#d1d5db" },
   btnDanger: { background: "#2d1515", color: "#ef4444" },
   message: { color: "#9ca3af", textAlign: "center", padding: "3rem" },

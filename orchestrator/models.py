@@ -94,3 +94,13 @@ class HealthResponse(BaseModel):
 
 class HealthUpdateRequest(BaseModel):
     results: List[Dict]
+
+
+class UpdateEnvRequest(BaseModel):
+    env_vars: Dict[str, str]
+
+
+class UpdateSettingsRequest(BaseModel):
+    branch: Optional[str] = None
+    build_command: Optional[str] = None
+    start_command: Optional[str] = None

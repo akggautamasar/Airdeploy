@@ -17,6 +17,8 @@ from models import (
     RedeployRequest,
     AddAccountRequest,
     UpdateAccountRequest,
+    UpdateEnvRequest,
+    UpdateSettingsRequest,
     DeployResponse,
     HealthResponse,
     HealthUpdateRequest,
@@ -237,6 +239,65 @@ async def get_logs(app_name: str):
 
     logs = await render_api.get_logs(api_key, render_service_id)
     return {"logs": logs}
+
+
+async def _get_api_key_for_app(app_name: str):
+    record = await registry.get_deployment(app_name)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"App '{app_name}' not found")
+    accounts = await registry.get_all_accounts()
+    api_key = next(
+        (a["api_key"] for a in accounts if a.get("account_id") == record["account_id"]),
+        None,
+    )
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Render account not found")
+    return record, api_key
+
+
+@app.get("/deployment/{app_name}/deploys", dependencies=[Depends(verify_secret)])
+async def get_deploy_history(app_name: str):
+    record, api_key = await _get_api_key_for_app(app_name)
+    deploys = await render_api.get_deploys(api_key, record["render_service_id"])
+    return {"deploys": deploys}
+
+
+@app.get("/deployment/{app_name}/env", dependencies=[Depends(verify_secret)])
+async def get_env(app_name: str):
+    record, api_key = await _get_api_key_for_app(app_name)
+    env_vars = await render_api.get_env_vars(api_key, record["render_service_id"])
+    return {"env_vars": env_vars}
+
+
+@app.put("/deployment/{app_name}/env", dependencies=[Depends(verify_secret)])
+async def update_env(app_name: str, req: UpdateEnvRequest):
+    record, api_key = await _get_api_key_for_app(app_name)
+    env_list = [{"key": k, "value": v} for k, v in req.env_vars.items()]
+    await render_api.update_env_vars(api_key, record["render_service_id"], env_list)
+    await render_api.trigger_redeploy(api_key, record["render_service_id"])
+    await registry.log_event(f"ENV UPDATED + REDEPLOY: {app_name}")
+    return {"updated": True}
+
+
+@app.put("/deployment/{app_name}/settings", dependencies=[Depends(verify_secret)])
+async def update_settings(app_name: str, req: UpdateSettingsRequest):
+    record, api_key = await _get_api_key_for_app(app_name)
+    changes = {k: v for k, v in req.model_dump().items() if v is not None}
+    if not changes:
+        raise HTTPException(status_code=400, detail="No fields provided")
+    patch: dict = {}
+    if "branch" in changes:
+        patch["branch"] = changes["branch"]
+    env_spec = {}
+    if "build_command" in changes:
+        env_spec["buildCommand"] = changes["build_command"]
+    if "start_command" in changes:
+        env_spec["startCommand"] = changes["start_command"]
+    if env_spec:
+        patch["serviceDetails"] = {"envSpecificDetails": env_spec}
+    await render_api.update_service(api_key, record["render_service_id"], patch)
+    await registry.log_event(f"SETTINGS UPDATED: {app_name} — {changes}")
+    return {"updated": True}
 
 
 @app.post("/fix-dns/{app_name}", dependencies=[Depends(verify_secret)])

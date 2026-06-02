@@ -163,22 +163,72 @@ async def delete_service(api_key: str, service_id: str) -> bool:
         return resp.status_code in (200, 204)
 
 
-async def get_logs(api_key: str, service_id: str) -> str:
+async def get_logs(api_key: str, service_id: str, limit: int = 200) -> str:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(
             f"{RENDER_API_BASE}/services/{service_id}/logs",
             headers=_headers(api_key),
+            params={"limit": limit, "direction": "backward"},
         )
         if resp.status_code != 200:
-            return f"Could not fetch logs (HTTP {resp.status_code})"
+            return f"Could not fetch logs (HTTP {resp.status_code}): {resp.text[:200]}"
         data = resp.json()
 
     if isinstance(data, list):
-        return "\n".join(
+        lines = [
             f"[{e.get('timestamp', '')}] {e.get('message', '')}"
-            for e in data
-        )
+            for e in reversed(data)
+        ]
+        return "\n".join(lines)
     return str(data)
+
+
+async def get_deploys(api_key: str, service_id: str) -> List[Dict]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{RENDER_API_BASE}/services/{service_id}/deploys",
+            headers=_headers(api_key),
+            params={"limit": 10},
+        )
+        if not resp.is_success:
+            return []
+        data = resp.json()
+    return [item.get("deploy", item) for item in data] if isinstance(data, list) else []
+
+
+async def get_env_vars(api_key: str, service_id: str) -> List[Dict]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{RENDER_API_BASE}/services/{service_id}/env-vars",
+            headers=_headers(api_key),
+        )
+        if not resp.is_success:
+            return []
+        data = resp.json()
+    return [item.get("envVar", item) for item in data] if isinstance(data, list) else []
+
+
+async def update_env_vars(api_key: str, service_id: str, env_vars: List[Dict]) -> None:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.put(
+            f"{RENDER_API_BASE}/services/{service_id}/env-vars",
+            headers=_headers(api_key),
+            json=env_vars,
+        )
+        if not resp.is_success:
+            raise RuntimeError(f"Render API {resp.status_code}: {resp.text}")
+
+
+async def update_service(api_key: str, service_id: str, patch: Dict) -> Dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.patch(
+            f"{RENDER_API_BASE}/services/{service_id}",
+            headers=_headers(api_key),
+            json=patch,
+        )
+        if not resp.is_success:
+            raise RuntimeError(f"Render API {resp.status_code}: {resp.text}")
+        return resp.json()
 
 
 async def list_services(api_key: str) -> List[Dict]:
