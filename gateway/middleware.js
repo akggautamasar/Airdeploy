@@ -8,34 +8,28 @@ async function fetchRegistry() {
     return registryCache;
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const groupId = process.env.REGISTRY_GROUP_ID;
-  const topicId = process.env.TOPIC_REGISTRY;
+  const orchestratorUrl = process.env.ORCHESTRATOR_URL;
+  const orchestratorSecret = process.env.ORCHESTRATOR_SECRET;
 
-  if (!token || !groupId || !topicId) return registryCache;
+  if (!orchestratorUrl) return registryCache;
 
   try {
-    const url = `https://api.telegram.org/bot${token}/getForumTopicMessages?chat_id=${groupId}&message_thread_id=${topicId}&limit=100`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const resp = await fetch(`${orchestratorUrl}/deployments`, {
+      headers: { "X-Secret": orchestratorSecret || "" },
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!resp.ok) return registryCache;
 
-    const data = await resp.json();
-    if (!data.ok) return registryCache;
-
-    const messages = data.result?.messages ?? [];
+    const deployments = await resp.json();
     const fresh = new Map();
 
-    for (const msg of messages) {
-      if (!msg?.text) continue;
-      try {
-        const record = JSON.parse(msg.text);
-        if (record.app_name && record.render_url) {
-          fresh.set(record.app_name, {
-            render_url: record.render_url,
-            status: record.status,
-          });
-        }
-      } catch {}
+    for (const dep of deployments) {
+      if (dep.app_name && dep.render_url) {
+        fresh.set(dep.app_name, {
+          render_url: dep.render_url,
+          status: dep.status,
+        });
+      }
     }
 
     if (fresh.size > 0) {
