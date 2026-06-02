@@ -105,7 +105,10 @@ async def create_service(
             headers=_headers(api_key),
             json=payload,
         )
-        resp.raise_for_status()
+        if not resp.is_success:
+            raise RuntimeError(
+                f"Render API {resp.status_code}: {resp.text}"
+            )
         data = resp.json()
 
     service = data.get("service", data)
