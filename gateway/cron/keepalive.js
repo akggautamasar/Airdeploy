@@ -1,7 +1,12 @@
 export default async function handler(request) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response("Unauthorized", { status: 401 });
+  // Auth is optional — if CRON_SECRET is set, enforce it; otherwise allow all
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const authHeader = request.headers.get("authorization") || "";
+    const tokenParam = new URL(request.url).searchParams.get("token") || "";
+    if (authHeader !== `Bearer ${cronSecret}` && tokenParam !== cronSecret) {
+      return new Response("Unauthorized", { status: 401 });
+    }
   }
 
   const orchestratorUrl = process.env.ORCHESTRATOR_URL;
@@ -65,7 +70,7 @@ export default async function handler(request) {
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
-    // best-effort health update — don't fail cron if this fails
+    // best-effort
   }
 
   const alive = results.filter((r) => r.alive).length;
