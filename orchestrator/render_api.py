@@ -99,12 +99,16 @@ async def create_service(
     if owner_id:
         payload["ownerId"] = owner_id
 
+    import json as _json
+    print(f"[RENDER] POST /services payload: {_json.dumps(payload)}")
+
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{RENDER_API_BASE}/services",
             headers=_headers(api_key),
             json=payload,
         )
+        print(f"[RENDER] Response {resp.status_code}: {resp.text[:500]}")
         if not resp.is_success:
             raise RuntimeError(
                 f"Render API {resp.status_code}: {resp.text}"
