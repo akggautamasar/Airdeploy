@@ -36,9 +36,13 @@ async def get_client() -> Client:
                 api_hash=TELEGRAM_API_HASH,
             )
         await _client.start()
-        # Warm up peer cache so Pyrogram can resolve the group ID
+        # String sessions don't carry the peer DB, so Pyrogram can't
+        # resolve the group ID until it fetches dialogs (which returns
+        # the access_hash for each chat and stores it locally).
         try:
-            await _client.get_chat(REGISTRY_GROUP_ID)
+            async for dialog in _client.get_dialogs():
+                if dialog.chat.id == REGISTRY_GROUP_ID:
+                    break
         except Exception:
             pass
     return _client
