@@ -1,5 +1,4 @@
 import httpx
-from urllib.parse import urlparse
 from typing import Dict, List
 from config import CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID, CLOUDFLARE_API_BASE, BASE_DOMAIN
 
@@ -11,20 +10,19 @@ def _headers() -> Dict[str, str]:
     }
 
 
-def _extract_hostname(url: str) -> str:
-    parsed = urlparse(url)
-    return parsed.hostname or url
+VERCEL_CNAME = "cname.vercel-dns.com"
 
 
-async def add_subdomain(subdomain: str, target_url: str) -> str:
-    hostname = _extract_hostname(target_url)
-
+async def add_subdomain(subdomain: str, _render_url: str = "") -> str:
+    """Create a DNS-only CNAME pointing to the Vercel gateway.
+    Pointing directly at Render causes Cloudflare Error 1000 because
+    Render itself runs on Cloudflare IPs."""
     payload = {
         "type": "CNAME",
         "name": subdomain,
-        "content": hostname,
+        "content": VERCEL_CNAME,
         "ttl": 1,
-        "proxied": True,
+        "proxied": False,
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -43,13 +41,15 @@ async def add_subdomain(subdomain: str, target_url: str) -> str:
     return data["result"]["id"]
 
 
-async def enable_proxy(record_id: str, subdomain: str, hostname: str) -> bool:
+async def fix_to_vercel(record_id: str, subdomain: str) -> bool:
+    """Update an existing DNS record to point at Vercel (DNS-only) instead of Render.
+    Fixes deployments that were created before the Vercel-routing change."""
     payload = {
         "type": "CNAME",
         "name": subdomain,
-        "content": hostname,
+        "content": VERCEL_CNAME,
         "ttl": 1,
-        "proxied": True,
+        "proxied": False,
     }
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.put(

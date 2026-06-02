@@ -18,6 +18,10 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 CLOUDFLARE_ZONE_ID = os.getenv("CLOUDFLARE_ZONE_ID", "")
 BASE_DOMAIN = os.getenv("BASE_DOMAIN", "airdeploy.xyz")
 
+VERCEL_TOKEN = os.getenv("VERCEL_TOKEN", "")
+VERCEL_PROJECT_ID = os.getenv("VERCEL_PROJECT_ID", "")
+VERCEL_TEAM_ID = os.getenv("VERCEL_TEAM_ID", "")
+
 ORCHESTRATOR_SECRET = os.getenv("ORCHESTRATOR_SECRET", "")
 
 RENDER_API_BASE = "https://api.render.com/v1"

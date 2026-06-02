@@ -9,6 +9,7 @@ import deployer
 import pool
 import registry
 import render_api
+import vercel_api
 from pool import NoAccountAvailable
 from models import (
     DeployRequest,
@@ -208,25 +209,35 @@ async def get_logs(app_name: str):
 
 @app.post("/fix-dns/{app_name}", dependencies=[Depends(verify_secret)])
 async def fix_dns(app_name: str):
-    """Re-enable Cloudflare proxy for an existing deployment whose DNS record
-    was created without proxying (proxied: false)."""
+    """Fix routing for an existing deployment that was created before the
+    Vercel-gateway routing change (its CNAME pointed to Render directly,
+    causing Cloudflare Error 1000). Updates the CNAME to point at Vercel
+    and adds the subdomain to the Vercel gateway project."""
     record = await registry.get_deployment(app_name)
     if not record:
         raise HTTPException(status_code=404, detail=f"App '{app_name}' not found")
 
-    cf_record_id = record.get("cloudflare_record_id", "")
-    render_url = record.get("render_url", "")
-    if not cf_record_id or not render_url:
-        raise HTTPException(status_code=400, detail="Missing cloudflare_record_id or render_url in registry")
-
-    from urllib.parse import urlparse
-    hostname = urlparse(render_url).hostname or render_url
     from config import BASE_DOMAIN
     subdomain = f"{app_name}.{BASE_DOMAIN}"
-    ok = await cloudflare_api.enable_proxy(cf_record_id, subdomain, hostname)
-    if not ok:
-        raise HTTPException(status_code=500, detail="Cloudflare update failed")
-    return {"fixed": True, "subdomain": subdomain, "proxied": True}
+    cf_record_id = record.get("cloudflare_record_id", "")
+
+    cf_fixed = False
+    if cf_record_id:
+        cf_fixed = await cloudflare_api.fix_to_vercel(cf_record_id, subdomain)
+
+    try:
+        import vercel_api as _vercel
+        await _vercel.add_domain(subdomain)
+        vercel_fixed = True
+    except Exception as e:
+        vercel_fixed = False
+        await registry.log_event(f"WARN: Vercel domain add failed in fix-dns for {subdomain}: {e}")
+
+    return {
+        "subdomain": subdomain,
+        "cloudflare_updated": cf_fixed,
+        "vercel_domain_added": vercel_fixed,
+    }
 
 
 @app.post("/health/update", dependencies=[Depends(verify_secret)])

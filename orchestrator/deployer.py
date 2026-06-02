@@ -4,6 +4,7 @@ from typing import Dict, Optional
 
 import render_api
 import cloudflare_api
+import vercel_api
 import registry
 import pool
 from config import BASE_DOMAIN, GITHUB_API_BASE
@@ -107,13 +108,22 @@ async def deploy(
         render_service_id = service_data["service_id"]
         render_url = service_data.get("render_url") or f"https://{app_name}.onrender.com"
 
-        # 2. Add Cloudflare DNS record immediately (before waiting for live)
+        # 2. Add DNS + Vercel domain so traffic routes correctly.
+        #    CNAME points to Vercel gateway (not Render) to avoid Cloudflare
+        #    Error 1000 (Render runs on Cloudflare IPs).
+        #    Vercel gateway then proxies to the Render URL.
+        subdomain = f"{app_name}.{BASE_DOMAIN}"
         try:
-            subdomain = f"{app_name}.{BASE_DOMAIN}"
-            cloudflare_record_id = await cloudflare_api.add_subdomain(subdomain, render_url)
+            cloudflare_record_id = await cloudflare_api.add_subdomain(subdomain)
         except Exception as cf_err:
             await render_api.delete_service(api_key, render_service_id)
             raise RuntimeError(f"Cloudflare DNS failed: {cf_err}")
+
+        try:
+            await vercel_api.add_domain(subdomain)
+        except Exception as ve:
+            # Non-fatal: Vercel token may not be set yet, or domain already exists.
+            await registry.log_event(f"WARN: Vercel domain add skipped for {subdomain}: {ve}")
 
         # 3. Register in Telegram with status="deploying" so the name is tracked
         #    even if the wait-for-live step times out.
@@ -192,6 +202,9 @@ async def undeploy(app_name: str, owner: str) -> None:
 
     if cloudflare_record_id:
         await cloudflare_api.delete_subdomain(cloudflare_record_id)
+
+    subdomain = f"{app_name}.{BASE_DOMAIN}"
+    await vercel_api.remove_domain(subdomain)
 
     await registry.delete_deployment(app_name)
     await pool.mark_account_available(account_id)
