@@ -13,15 +13,21 @@ def _headers(api_key: str) -> Dict[str, str]:
 
 
 async def get_owner_id(api_key: str) -> str:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{RENDER_API_BASE}/owners?limit=1",
-            headers=_headers(api_key),
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    if isinstance(data, list) and data:
-        return data[0].get("owner", data[0]).get("id", "")
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{RENDER_API_BASE}/owners?limit=1",
+                headers=_headers(api_key),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        if isinstance(data, list) and data:
+            item = data[0]
+            # Response is [{owner: {id, ...}, cursor: ...}] or [{id, ...}]
+            owner = item.get("owner", item)
+            return owner.get("id", "")
+    except Exception:
+        pass
     return ""
 
 
@@ -40,7 +46,6 @@ async def create_service(
         payload = {
             "type": "static_site",
             "name": app_name,
-            "ownerId": owner_id,
             "repo": repo_url,
             "branch": "main",
             "autoDeploy": "no",
@@ -55,7 +60,6 @@ async def create_service(
         payload = {
             "type": "web_service",
             "name": app_name,
-            "ownerId": owner_id,
             "repo": repo_url,
             "branch": "main",
             "autoDeploy": "no",
@@ -76,7 +80,6 @@ async def create_service(
         payload = {
             "type": "web_service",
             "name": app_name,
-            "ownerId": owner_id,
             "repo": repo_url,
             "branch": "main",
             "autoDeploy": "no",
@@ -92,6 +95,9 @@ async def create_service(
             },
             "envVars": env_list,
         }
+
+    if owner_id:
+        payload["ownerId"] = owner_id
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(

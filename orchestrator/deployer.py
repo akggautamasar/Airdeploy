@@ -10,12 +10,21 @@ from config import BASE_DOMAIN, GITHUB_API_BASE
 
 
 _APP_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")
+_GITHUB_REPO_RE = re.compile(r"github\.com/[^/]+/[^/]+")
 
 
 def _validate_app_name(app_name: str) -> None:
     if not _APP_NAME_RE.match(app_name):
         raise ValueError(
             "App name must be lowercase alphanumeric with optional hyphens, 3-63 chars."
+        )
+
+
+def _validate_repo_url(repo_url: str) -> None:
+    if not _GITHUB_REPO_RE.search(repo_url):
+        raise ValueError(
+            "Invalid repo URL. Must be a full GitHub repo URL like: "
+            "https://github.com/username/repository-name"
         )
 
 
@@ -72,6 +81,7 @@ async def deploy(
     env_vars: Dict[str, str] = {},
 ) -> Dict:
     _validate_app_name(app_name)
+    _validate_repo_url(repo_url)
 
     existing = await registry.get_deployment(app_name)
     if existing:
