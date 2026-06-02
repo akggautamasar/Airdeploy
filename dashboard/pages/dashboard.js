@@ -198,7 +198,10 @@ export default function Dashboard() {
       <div style={styles.page}>
         <nav style={styles.nav}>
           <Link href="/" style={styles.logo}>⚡ AirDeploy</Link>
-          <Link href="/deploy" style={styles.ctaBtn}>+ New Deployment</Link>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+            <Link href="/admin" style={{ color: "#6b7280", textDecoration: "none", fontSize: "0.85rem" }}>⚙ Admin</Link>
+            <Link href="/deploy" style={styles.ctaBtn}>+ New Deployment</Link>
+          </div>
         </nav>
 
         <main style={styles.main}>
