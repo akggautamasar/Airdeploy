@@ -1,5 +1,8 @@
-from typing import Dict, Optional
+import os
+from typing import Dict, Optional, List
 import registry
+
+MAX_SERVICES_PER_ACCOUNT = int(os.getenv("MAX_SERVICES_PER_ACCOUNT", "5"))
 
 
 class NoAccountAvailable(Exception):
@@ -8,24 +11,40 @@ class NoAccountAvailable(Exception):
 
 async def get_available_account() -> Dict:
     accounts = await registry.get_all_accounts()
-    for account in accounts:
-        if account.get("status") == "available":
-            return account
-    raise NoAccountAvailable("No Render accounts available. Platform at capacity.")
+    available = [a for a in accounts if a.get("status") == "available"]
+    if not available:
+        raise NoAccountAvailable("No Render accounts available. Platform at capacity.")
+    # Pick the least-loaded account so services spread across accounts evenly
+    return min(available, key=lambda a: a.get("services_count", 0))
 
 
+async def increment_account(account_id: str) -> None:
+    accounts = await registry.get_all_accounts()
+    for acc in accounts:
+        if acc.get("account_id") == account_id:
+            count = acc.get("services_count", 0) + 1
+            status = "full" if count >= MAX_SERVICES_PER_ACCOUNT else "available"
+            await registry.update_account(account_id, {"services_count": count, "status": status})
+            return
+
+
+async def decrement_account(account_id: str) -> None:
+    accounts = await registry.get_all_accounts()
+    for acc in accounts:
+        if acc.get("account_id") == account_id:
+            count = max(0, acc.get("services_count", 1) - 1)
+            status = "full" if count >= MAX_SERVICES_PER_ACCOUNT else "available"
+            await registry.update_account(account_id, {"services_count": count, "status": status})
+            return
+
+
+# Keep old names as aliases so existing call sites still work
 async def mark_account_full(account_id: str) -> None:
-    await registry.update_account(
-        account_id,
-        {"status": "full", "services_count": 1},
-    )
+    await increment_account(account_id)
 
 
 async def mark_account_available(account_id: str) -> None:
-    await registry.update_account(
-        account_id,
-        {"status": "available", "services_count": 0},
-    )
+    await decrement_account(account_id)
 
 
 async def add_account(api_key: str, email: str) -> str:
