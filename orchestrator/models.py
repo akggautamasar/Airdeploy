@@ -104,3 +104,4 @@ class UpdateSettingsRequest(BaseModel):
     branch: Optional[str] = None
     build_command: Optional[str] = None
     start_command: Optional[str] = None
+    repo_url: Optional[str] = None

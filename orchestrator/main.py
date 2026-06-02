@@ -288,6 +288,8 @@ async def update_settings(app_name: str, req: UpdateSettingsRequest):
     patch: dict = {}
     if "branch" in changes:
         patch["branch"] = changes["branch"]
+    if "repo_url" in changes:
+        patch["repo"] = changes["repo_url"]
     env_spec = {}
     if "build_command" in changes:
         env_spec["buildCommand"] = changes["build_command"]
@@ -296,6 +298,14 @@ async def update_settings(app_name: str, req: UpdateSettingsRequest):
     if env_spec:
         patch["serviceDetails"] = {"envSpecificDetails": env_spec}
     await render_api.update_service(api_key, record["render_service_id"], patch)
+    # Keep registry in sync if repo_url changed
+    if "repo_url" in changes:
+        msg_id = record.get("message_id") or record.get("_message_id")
+        if msg_id:
+            record["repo_url"] = changes["repo_url"]
+            record.pop("_message_id", None)
+            import json as _json
+            await registry._edit_message(msg_id, _json.dumps(record, indent=2))
     await registry.log_event(f"SETTINGS UPDATED: {app_name} — {changes}")
     return {"updated": True}
 

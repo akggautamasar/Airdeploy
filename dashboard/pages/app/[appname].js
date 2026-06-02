@@ -251,6 +251,7 @@ function EnvTab({ appName }) {
 
 // ---- SETTINGS TAB ----
 function SettingsTab({ app, appName, onDelete }) {
+  const [repoUrl, setRepoUrl] = useState(app?.repo_url || "");
   const [branch, setBranch] = useState(app?.branch || "main");
   const [buildCmd, setBuildCmd] = useState(app?.build_command || "");
   const [startCmd, setStartCmd] = useState(app?.start_command || "");
@@ -267,6 +268,7 @@ function SettingsTab({ app, appName, onDelete }) {
       await apiFetch(`/deployment/${appName}/settings`, {
         method: "PUT",
         body: JSON.stringify({
+          repo_url: repoUrl || undefined,
           branch: branch || undefined,
           build_command: buildCmd || undefined,
           start_command: startCmd || undefined,
@@ -298,6 +300,10 @@ function SettingsTab({ app, appName, onDelete }) {
       {success && <div style={s.successBox}>Settings updated!</div>}
       <div style={s.settingsSection}>
         <h3 style={s.sectionTitle}>Build & Deploy</h3>
+        <div style={s.field}>
+          <label style={s.label}>Repository URL</label>
+          <input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} style={s.input} placeholder="https://github.com/username/repo" />
+        </div>
         <div style={s.field}>
           <label style={s.label}>Branch</label>
           <input value={branch} onChange={(e) => setBranch(e.target.value)} style={s.input} placeholder="main" />
